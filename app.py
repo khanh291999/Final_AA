@@ -16,7 +16,7 @@ from graph_sampling import (
 )
 from community_detection import (
     SpectralCommunityDetection, DivideAndConquerCommunityDetection,
-    generate_stochastic_block_model, evaluate_communities
+    generate_stochastic_block_model, generate_core_periphery_structure, evaluate_communities
 )
 import time
 
@@ -270,14 +270,62 @@ with tab3:
     ### So sánh hiệu suất phát hiện cộng đồng với các phương pháp lấy mẫu khác nhau
     """)
     
+    # Hiển thị visualization của 2 loại structure
+    st.subheader("🔍 Hiểu về 2 loại cấu trúc mạng")
+    
+    try:
+        from pathlib import Path
+        img_path = Path("network_structures_comparison.png")
+        if img_path.exists():
+            st.image(str(img_path), caption="So sánh Community Structure vs Core-Periphery Structure", width="stretch")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.info("""
+                **Community Structure (màu đa sắc)**
+                - Mạng chia thành các nhóm riêng biệt
+                - Nodes trong cùng nhóm kết nối chặt chẽ
+                - Giữa các nhóm có ít kết nối
+                - Ví dụ: Mạng xã hội, phân nhóm khách hàng
+                """)
+            with col2:
+                st.warning("""
+                **Core-Periphery Structure (đỏ-xanh)**
+                - Core (đỏ): Nhóm trung tâm, degree cao
+                - Periphery (xanh): Nhóm ngoại vi, degree thấp
+                - Core kết nối chặt với nhau
+                - Periphery chủ yếu kết nối với core
+                - Ví dụ: Mạng internet, hub-airports
+                """)
+    except Exception as e:
+        st.info("💡 Chạy `python test_core_periphery.py` để tạo hình minh họa 2 loại cấu trúc")
+    
+    st.markdown("---")
+    
+    # Chọn loại network structure
+    st.subheader("🎯 Chọn loại cấu trúc mạng")
+    network_structure = st.radio(
+        "Loại cấu trúc mạng để phân tích:",
+        ["Community Structure", "Core-Periphery Structure"],
+        horizontal=True,
+        help="Community: mạng chia thành các nhóm riêng biệt. Core-Periphery: có nhóm trung tâm và nhóm ngoại vi"
+    )
+    
     col1, col2 = st.columns([1, 1])
     
     with col1:
         st.subheader("Tham số đồ thị")
         cd_n_nodes = st.slider("Số nodes", 100, 500, 200, key="cd_nodes")
-        cd_n_communities = st.slider("Số communities", 2, 8, 4, key="cd_comm")
-        cd_p_in = st.slider("p_in (trong cộng đồng)", 0.1, 0.8, 0.3, key="cd_pin")
-        cd_p_out = st.slider("p_out (giữa cộng đồng)", 0.01, 0.2, 0.02, key="cd_pout")
+        
+        if network_structure == "Community Structure":
+            cd_n_communities = st.slider("Số communities", 2, 8, 4, key="cd_comm")
+            cd_p_in = st.slider("p_in (trong cộng đồng)", 0.1, 0.8, 0.3, key="cd_pin")
+            cd_p_out = st.slider("p_out (giữa cộng đồng)", 0.01, 0.2, 0.02, key="cd_pout")
+        else:  # Core-Periphery Structure
+            cd_core_ratio = st.slider("Tỷ lệ core nodes", 0.2, 0.5, 0.3, key="cd_core_ratio")
+            cd_p_core_core = st.slider("p_core_core (trong core)", 0.3, 0.8, 0.6, key="cd_pcc")
+            cd_p_core_periphery = st.slider("p_core_periphery", 0.1, 0.5, 0.3, key="cd_pcp")
+            cd_p_periphery = st.slider("p_periphery_periphery", 0.01, 0.2, 0.05, key="cd_pp")
     
     with col2:
         st.subheader("Tham số Divide-and-Conquer")
@@ -287,20 +335,31 @@ with tab3:
     
     if st.button("🔬 Chạy phân tích", type="primary"):
         with st.spinner("Đang tạo đồ thị và chạy phân tích..."):
-            # Tạo đồ thị
-            G, true_labels = generate_stochastic_block_model(
-                cd_n_nodes, cd_n_communities, cd_p_in, cd_p_out
-            )
+            # Tạo đồ thị dựa trên loại structure
+            if network_structure == "Community Structure":
+                G, true_labels = generate_stochastic_block_model(
+                    cd_n_nodes, cd_n_communities, cd_p_in, cd_p_out
+                )
+                num_groups = cd_n_communities
+                structure_name = "Community Structure"
+            else:
+                G, true_labels = generate_core_periphery_structure(
+                    cd_n_nodes, cd_core_ratio, cd_p_core_core, 
+                    cd_p_core_periphery, cd_p_periphery
+                )
+                num_groups = 2  # Core and Periphery
+                structure_name = "Core-Periphery Structure"
             
-            st.success(f"✅ Đã tạo đồ thị: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
+            st.success(f"✅ Đã tạo đồ thị {structure_name}: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
             
             # Base detector
             base_detector = SpectralCommunityDetection()
             
             # Baseline
-            st.info("Đang chạy baseline (full graph)...")
+            status_text = st.empty()
+            status_text.info("Đang chạy baseline (full graph)...")
             start_time = time.time()
-            baseline_communities = base_detector.detect(G, cd_n_communities)
+            baseline_communities = base_detector.detect(G, num_groups)
             baseline_time = time.time() - start_time
             baseline_metrics = evaluate_communities(true_labels, baseline_communities)
             
@@ -308,6 +367,7 @@ with tab3:
             methods = {
                 "Random Node": RandomNodeSampling(seed=42),
                 "Degree Node": DegreeBasedSampling(seed=42),
+                "Random Edge": RandomEdgeSampling(seed=42),
                 "BFS": BFSSampling(seed=42),
                 "DFS": DFSSampling(seed=42),
                 "Random Node-Neighbor": RandomNodeNeighborSampling(seed=42),
@@ -319,13 +379,14 @@ with tab3:
                 'NMI': baseline_metrics['nmi'],
                 'ARI': baseline_metrics['ari'],
                 'Accuracy': baseline_metrics['accuracy'],
-                'Time (s)': baseline_time
+                'Time (s)': baseline_time,
+                'Structure': structure_name
             }]
             
             progress_bar = st.progress(0)
             
             for idx, (name, sampler) in enumerate(methods.items()):
-                st.info(f"Đang chạy {name}...")
+                status_text.info(f"Đang chạy {name}...")
                 
                 dc_detector = DivideAndConquerCommunityDetection(
                     base_detector=base_detector,
@@ -336,7 +397,7 @@ with tab3:
                 )
                 
                 start_time = time.time()
-                pred_communities = dc_detector.detect(G, cd_n_communities)
+                pred_communities = dc_detector.detect(G, num_groups)
                 elapsed = time.time() - start_time
                 
                 metrics = evaluate_communities(true_labels, pred_communities)
@@ -346,17 +407,18 @@ with tab3:
                     'NMI': metrics['nmi'],
                     'ARI': metrics['ari'],
                     'Accuracy': metrics['accuracy'],
-                    'Time (s)': elapsed
+                    'Time (s)': elapsed,
+                    'Structure': structure_name
                 })
                 
                 progress_bar.progress((idx + 1) / len(methods))
             
-            st.success("✅ Hoàn thành!")
+            status_text.success("✅ Hoàn thành tất cả phương pháp!")
             
             # Hiển thị kết quả
-            st.subheader("📊 Kết quả Community Detection")
+            st.subheader(f"📊 Kết quả trên {structure_name}")
             df_cd = pd.DataFrame(results)
-            st.dataframe(df_cd.style.format({
+            st.dataframe(df_cd[['Method', 'NMI', 'ARI', 'Accuracy', 'Time (s)']].style.format({
                 'NMI': '{:.3f}',
                 'ARI': '{:.3f}',
                 'Accuracy': '{:.3f}',
@@ -370,16 +432,18 @@ with tab3:
             
             with col1:
                 fig_nmi = px.bar(df_cd, x='Method', y='NMI',
-                                title="Normalized Mutual Information (NMI)",
+                                title=f"Normalized Mutual Information (NMI) - {structure_name}",
                                 color='NMI', color_continuous_scale='greens')
                 fig_nmi.add_hline(y=0.8, line_dash="dash", line_color="red",
                                  annotation_text="Good threshold")
                 st.plotly_chart(fig_nmi, width='stretch')
             
             with col2:
+                # Tạo size an toàn (chuyển giá trị âm thành giá trị dương nhỏ)
+                df_cd['size_safe'] = df_cd['ARI'].apply(lambda x: max(abs(x) * 100, 10))
                 fig_time = px.scatter(df_cd, x='Time (s)', y='NMI', 
-                                    text='Method', size='ARI',
-                                    title="NMI vs Thời gian thực hiện",
+                                    text='Method', size='size_safe',
+                                    title=f"NMI vs Thời gian thực hiện - {structure_name}",
                                     color='Accuracy', color_continuous_scale='viridis')
                 fig_time.update_traces(textposition='top center')
                 st.plotly_chart(fig_time, width='stretch')
@@ -389,12 +453,29 @@ with tab3:
             best_method = df_cd.iloc[best_idx]
             
             st.success(f"""
-            ### 🏆 Phương pháp tốt nhất: **{best_method['Method']}**
+            ### 🏆 Phương pháp tốt nhất trên {structure_name}: **{best_method['Method']}**
             - **NMI**: {best_method['NMI']:.3f}
             - **ARI**: {best_method['ARI']:.3f}
             - **Accuracy**: {best_method['Accuracy']:.3f}
             - **Time**: {best_method['Time (s)']:.2f}s
             """)
+            
+            # Thêm phân tích insight
+            if network_structure == "Community Structure":
+                st.info("""
+                📌 **Insight cho Community Structure:**
+                - Random Node-Neighbor (RNN) thường tốt vì giữ được cấu trúc local của communities
+                - DFS có thể tốt vì đi sâu vào một community trước khi chuyển sang community khác
+                - Random Edge thường kém vì không đảm bảo lấy đủ nodes từ mỗi community
+                """)
+            else:
+                st.info("""
+                📌 **Insight cho Core-Periphery Structure:**
+                - Degree Node (DN) thường tốt vì ưu tiên core nodes (high degree)
+                - Random Walk có thể tốt vì xu hướng ở lại core (nhiều edges)
+                - BFS có thể phát hiện tốt ranh giới core-periphery
+                """)
+
 
 # Footer
 st.markdown("---")

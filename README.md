@@ -95,10 +95,14 @@ Nhấn `Ctrl + C` trong terminal để dừng app
 - So sánh density và cấu trúc
 
 ### Tab 3: Community Detection
-- Tạo đồ thị với communities
-- So sánh hiệu suất phát hiện cộng đồng
+- Chọn loại cấu trúc mạng:
+  - **Community Structure**: Mạng với các nhóm cộng đồng riêng biệt
+  - **Core-Periphery Structure**: Mạng với nhóm trung tâm (core) và ngoại vi (periphery)
+- Tạo đồ thị với các tham số tùy chỉnh
+- So sánh hiệu suất phát hiện cộng đồng/cấu trúc trên 7 phương pháp sampling
 - Metrics: NMI, ARI, Accuracy
-- Tìm phương pháp tốt nhất
+- Tìm phương pháp tốt nhất cho từng loại cấu trúc
+- Insights về phương pháp phù hợp với từng loại network
 
 ## 📁 Cấu trúc project
 
@@ -147,7 +151,8 @@ python bfs_dfs_visualization.py
 
 ## 📊 Kết quả mẫu
 
-Testing trên Stochastic Block Model (200 nodes, 4 communities):
+### Testing trên Community Structure
+Stochastic Block Model (200 nodes, 4 communities):
 
 | Phương pháp | NMI | ARI | Thời gian |
 |------------|-----|-----|-----------|
@@ -158,7 +163,25 @@ Testing trên Stochastic Block Model (200 nodes, 4 communities):
 | BFS | 0.632 | 0.491 | Nhanh ⚡ |
 | Random Edge | 0.028 | 0.007 | Nhanh ⚡ |
 
-**→ Random Node-Neighbor (RNN) cho kết quả tốt nhất!**
+**→ Random Node-Neighbor (RNN) tốt nhất cho Community Structure!**
+
+### Testing trên Core-Periphery Structure
+Core-Periphery Network (200 nodes, 30% core, 70% periphery):
+
+| Phương pháp | NMI | ARI | Đặc điểm |
+|------------|-----|-----|-----------|
+| Degree Node | Cao | Cao | Tốt vì ưu tiên core nodes |
+| Random Walk | Cao | Cao | Tốt vì xu hướng ở core |
+| BFS | Trung bình | Trung bình | Phát hiện ranh giới tốt |
+| Random Node | Thấp | Thấp | Không phân biệt core/periphery |
+
+**→ Degree Node (DN) và Random Walk tốt nhất cho Core-Periphery!**
+
+### Kết luận quan trọng
+
+✅ **Phương pháp sampling phù hợp phụ thuộc vào cấu trúc mạng:**
+- **Community Structure** → RNN, DFS hiệu quả nhất
+- **Core-Periphery Structure** → Degree Node, Random Walk hiệu quả nhất
 
 ## 📚 Tài liệu tham khảo
 

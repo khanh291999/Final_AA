@@ -300,3 +300,66 @@ def generate_stochastic_block_model(n: int, num_communities: int,
                     G.add_edge(i, j)
     
     return G, true_labels
+
+
+def generate_core_periphery_structure(n: int, core_ratio: float = 0.3,
+                                      p_core_core: float = 0.6,
+                                      p_core_periphery: float = 0.3,
+                                      p_periphery_periphery: float = 0.05,
+                                      seed: int = 42) -> Tuple[nx.Graph, Dict[int, int]]:
+    """
+    Generate a graph with core-periphery structure.
+    
+    Core-periphery structure is characterized by:
+    - Core: Densely connected nodes (high degree, many connections)
+    - Periphery: Sparsely connected nodes (low degree, few connections)
+    - Core nodes are well-connected to each other
+    - Periphery nodes mainly connect to core, rarely to each other
+    
+    Args:
+        n: Number of nodes
+        core_ratio: Ratio of nodes in core (0.0 to 1.0)
+        p_core_core: Probability of edge between core nodes (high)
+        p_core_periphery: Probability of edge between core and periphery
+        p_periphery_periphery: Probability of edge between periphery nodes (low)
+        seed: Random seed
+        
+    Returns:
+        Tuple of (graph, labels) where labels: 0=core, 1=periphery
+    """
+    np.random.seed(seed)
+    
+    # Determine core and periphery sizes
+    n_core = max(1, int(n * core_ratio))
+    n_periphery = n - n_core
+    
+    # Assign nodes: 0 = core, 1 = periphery
+    true_labels = {}
+    for node in range(n_core):
+        true_labels[node] = 0  # Core
+    for node in range(n_core, n):
+        true_labels[node] = 1  # Periphery
+    
+    # Create graph
+    G = nx.Graph()
+    G.add_nodes_from(range(n))
+    
+    # Add edges based on core-periphery structure
+    for i in range(n):
+        for j in range(i + 1, n):
+            prob = 0.0
+            
+            if true_labels[i] == 0 and true_labels[j] == 0:
+                # Both in core
+                prob = p_core_core
+            elif true_labels[i] == 1 and true_labels[j] == 1:
+                # Both in periphery
+                prob = p_periphery_periphery
+            else:
+                # One core, one periphery
+                prob = p_core_periphery
+            
+            if np.random.random() < prob:
+                G.add_edge(i, j)
+    
+    return G, true_labels
